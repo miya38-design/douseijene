@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>動静表ジェネレーター</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      line-height: 1.7;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.3em; }
+    p.lead { color: #666; margin-top: 0; }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 28px;
+      margin-top: 24px;
+    }
+    .drop {
+      border: 2px dashed #bbb;
+      border-radius: 10px;
+      padding: 36px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .drop.hover { border-color: #2b7cff; background: rgba(43,124,255,0.06); }
+    .drop input[type=file] { display: none; }
+    .filename {
+      margin-top: 14px;
+      font-size: 0.95rem;
+      color: #333;
+      word-break: break-all;
+    }
+    button {
+      margin-top: 18px;
+      width: 100%;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      background: #2b7cff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #1f66d6; }
+    .status {
+      margin-top: 16px;
+      font-size: 0.95rem;
+      min-height: 1.5em;
+    }
+    .status.error { color: #c0392b; }
+    .status.ok { color: #27ae60; }
+    .spec {
+      font-size: 0.85rem;
+      color: #777;
+      margin-top: 20px;
+    }
+    code {
+      background: rgba(127,127,127,0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+  </style>
+</head>
+<body>
+  <h1>動静表ジェネレーター</h1>
+  <p class="lead">旅行命令復命書の Excel ファイルから、日付ごとに集約した動静表を出力します。</p>
+
+  <div class="card">
+    <form id="form">
+      <label class="drop" id="drop">
+        <div id="dropText">ここをクリック、またはファイルをドラッグ＆ドロップ<br><small>(.xlsx)</small></div>
+        <input type="file" name="file" id="file" accept=".xlsx" required>
+        <div class="filename" id="filename"></div>
+      </label>
+      <button type="submit" id="submit" disabled>変換してダウンロード</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <div class="spec">
+    <strong>仕様</strong><br>
+    各シートから 氏名 <code>W3</code>、出張期間 <code>J4..V5</code>、出張先 <code>F7</code>、用務 <code>F8</code> を抽出し、<br>
+    A 列に日付、B 列に <code>氏名：用務（出張先）時分～時分</code> を出力します。同日のものは同セルに改行で連結します。
+  </div>
+
+  <script>
+    const drop = document.getElementById('drop');
+    const fileInput = document.getElementById('file');
+    const filename = document.getElementById('filename');
+    const submit = document.getElementById('submit');
+    const status = document.getElementById('status');
+    const form = document.getElementById('form');
+
+    function setFile(f) {
+      if (!f) return;
+      if (!f.name.toLowerCase().endsWith('.xlsx')) {
+        status.textContent = '.xlsx ファイルを選択してください';
+        status.className = 'status error';
+        return;
+      }
+      filename.textContent = f.name;
+      submit.disabled = false;
+      status.textContent = '';
+      status.className = 'status';
+    }
+
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hover'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('hover');
+      const f = e.dataTransfer.files[0];
+      if (f) {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        fileInput.files = dt.files;
+        setFile(f);
+      }
+    });
+    fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      submit.disabled = true;
+      status.textContent = '変換中…';
+      status.className = 'status';
+
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+
+      try {
+        const res = await fetch('/process', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `HTTP ${res.status}`);
+        }
+        const disp = res.headers.get('Content-Disposition') || '';
+        let outName = '動静表.xlsx';
+        const m = disp.match(/filename\*=UTF-8''([^;]+)/i) || disp.match(/filename="?([^";]+)"?/i);
+        if (m) outName = decodeURIComponent(m[1]);
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = outName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        status.textContent = `完了：${outName} をダウンロードしました`;
+        status.className = 'status ok';
+      } catch (err) {
+        status.textContent = `失敗：${err.message}`;
+        status.className = 'status error';
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

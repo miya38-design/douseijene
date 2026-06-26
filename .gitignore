@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.env
+
+# 個人情報を含む可能性のあるExcelファイル
+*.xlsx
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
