@@ -31,8 +31,13 @@ def process_route():
     if not file.filename.lower().endswith(".xlsx"):
         abort(400, ".xlsx ファイルを指定してください")
 
+    order_raw = request.form.get("order", "")
+    order = [k.strip() for k in order_raw.split(",") if k.strip()] or None
+
     try:
-        out_bytes, out_name, _days, _entries = processor.process_excel(file.stream)
+        out_bytes, out_name, _days, _entries = processor.process_excel(file.stream, order=order)
+    except ValueError as e:
+        abort(400, str(e))
     except Exception as e:  # noqa: BLE001
         abort(500, f"処理に失敗しました: {e}")
 

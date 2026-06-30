@@ -72,6 +72,64 @@
       border-radius: 4px;
       font-size: 0.85em;
     }
+    .order-label {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+    }
+    .order-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .order-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: rgba(127,127,127,0.04);
+      font-size: 0.95rem;
+    }
+    .order-list .order-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #2b7cff;
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-right: 10px;
+    }
+    .order-list .order-text { display: flex; align-items: center; }
+    .order-list .arrows button {
+      width: 32px;
+      height: 28px;
+      margin: 0 0 0 4px;
+      padding: 0;
+      font-size: 0.8rem;
+      background: #eee;
+      color: #333;
+      border-radius: 6px;
+    }
+    .order-list .arrows button:hover:not(:disabled) { background: #ddd; }
+    .order-list .arrows button:disabled { background: #f4f4f4; color: #bbb; cursor: not-allowed; }
+    .order-preview {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #555;
+      background: rgba(127,127,127,0.08);
+      border-radius: 8px;
+      padding: 10px 14px;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -85,6 +143,41 @@
         <input type="file" name="file" id="file" accept=".xlsx" required>
         <div class="filename" id="filename"></div>
       </label>
+
+      <div class="order-label">出力順序（▲▼で並び替え）</div>
+      <ul class="order-list" id="orderList">
+        <li data-key="name">
+          <span class="order-text"><span class="order-index"></span>氏名</span>
+          <span class="arrows">
+            <button type="button" class="up" aria-label="上へ">▲</button>
+            <button type="button" class="down" aria-label="下へ">▼</button>
+          </span>
+        </li>
+        <li data-key="purpose">
+          <span class="order-text"><span class="order-index"></span>用務</span>
+          <span class="arrows">
+            <button type="button" class="up" aria-label="上へ">▲</button>
+            <button type="button" class="down" aria-label="下へ">▼</button>
+          </span>
+        </li>
+        <li data-key="dest">
+          <span class="order-text"><span class="order-index"></span>出張先</span>
+          <span class="arrows">
+            <button type="button" class="up" aria-label="上へ">▲</button>
+            <button type="button" class="down" aria-label="下へ">▼</button>
+          </span>
+        </li>
+        <li data-key="time">
+          <span class="order-text"><span class="order-index"></span>時分～時分</span>
+          <span class="arrows">
+            <button type="button" class="up" aria-label="上へ">▲</button>
+            <button type="button" class="down" aria-label="下へ">▼</button>
+          </span>
+        </li>
+      </ul>
+      <div class="order-preview" id="orderPreview"></div>
+      <input type="hidden" name="order" id="orderInput">
+
       <button type="submit" id="submit" disabled>変換してダウンロード</button>
       <div class="status" id="status"></div>
     </form>
@@ -93,7 +186,7 @@
   <div class="spec">
     <strong>仕様</strong><br>
     各シートから 氏名 <code>W3</code>、出張期間 <code>J4..V5</code>、出張先 <code>F7</code>、用務 <code>F8</code> を抽出し、<br>
-    A 列に日付、B 列に <code>氏名：用務（出張先）時分～時分</code> を出力します。同日のものは同セルに改行で連結します。
+    A 列に日付、B 列に上で指定した順序で1行を組み立てます。同日のものは同セルに改行で連結します。
   </div>
 
   <script>
@@ -103,6 +196,43 @@
     const submit = document.getElementById('submit');
     const status = document.getElementById('status');
     const form = document.getElementById('form');
+
+    const orderList = document.getElementById('orderList');
+    const orderPreview = document.getElementById('orderPreview');
+    const orderInput = document.getElementById('orderInput');
+
+    const SAMPLE = {
+      name: '松﨑　輝美：',
+      purpose: '芦北町学校事務センター業務',
+      dest: '（芦北町立佐敷小学校）',
+      time: '14:00~16:30',
+    };
+
+    function refreshOrderUI() {
+      const items = Array.from(orderList.children);
+      items.forEach((li, i) => {
+        li.querySelector('.order-index').textContent = i + 1;
+        li.querySelector('.up').disabled = (i === 0);
+        li.querySelector('.down').disabled = (i === items.length - 1);
+      });
+      const order = items.map(li => li.dataset.key);
+      orderInput.value = order.join(',');
+      orderPreview.textContent = '例: ' + order.map(k => SAMPLE[k]).join('');
+    }
+
+    orderList.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const li = btn.closest('li');
+      if (btn.classList.contains('up') && li.previousElementSibling) {
+        orderList.insertBefore(li, li.previousElementSibling);
+      } else if (btn.classList.contains('down') && li.nextElementSibling) {
+        orderList.insertBefore(li.nextElementSibling, li);
+      }
+      refreshOrderUI();
+    });
+
+    refreshOrderUI();
 
     function setFile(f) {
       if (!f) return;
@@ -140,6 +270,7 @@
 
       const fd = new FormData();
       fd.append('file', fileInput.files[0]);
+      fd.append('order', orderInput.value);
 
       try {
         const res = await fetch('/process', { method: 'POST', body: fd });
