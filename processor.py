@@ -148,8 +148,9 @@ def process_excel(
             f"order には {sorted(VALID_KEYS)} を重複なくすべて含めてください: {order}"
         )
 
-    wb = openpyxl.load_workbook(file, data_only=True)
+    wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
     by_date = _extract_entries(wb)
+    wb.close()
     out_wb = _build_workbook(by_date, order)
     output_name = _format_output_name(by_date)
 
